@@ -1,0 +1,90 @@
+name: Build Effects XNB (Android)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "EFFECTS/**"
+      - ".github/workflows/build-effects-android.yml"
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Install MonoGame tools (MGCB/MGFXC)
+        shell: pwsh
+        run: |
+          dotnet tool install -g dotnet-mgcb
+          dotnet tool install -g dotnet-mgfxc
+          echo "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          mgcb --help
+
+      - name: Build XNB from EFFECTS (Android platform)
+        shell: pwsh
+        run: |
+          $EffectsPath = "EFFECTS"
+          $OutDir      = "Saidaa"
+          $IntDir      = "Saidaa_intermediate"
+
+          if (!(Test-Path $EffectsPath)) { throw "Pasta não encontrada: $EffectsPath" }
+
+          # Cria pastas de saída
+          New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+          New-Item -ItemType Directory -Force -Path $IntDir | Out-Null
+
+          # Lista todos os .fx em EFFECTS/
+          $fxFiles = Get-ChildItem -Path $EffectsPath -Filter *.fx -File | Sort-Object FullName
+          if ($fxFiles.Count -eq 0) { throw "Nenhum .fx encontrado em $EffectsPath" }
+
+          # workingDir = raiz do repo (onde está a pasta EFFECTS)
+          $workingDir = (Resolve-Path ".").Path
+
+          # Monta /build:... relativo ao workingDir
+          $buildLines = @()
+          foreach ($f in $fxFiles) {
+            $full = $f.FullName
+            $rel = $full.Substring($workingDir.Length).TrimStart('\','/')
+            $rel = $rel -replace '\\','/'
+            $buildLines += "/build:$rel"
+          }
+
+          # Response file MGCB (no repo root)
+          $mgcbFile = "EffectsOnly.mgcb"
+          $content = @()
+          $content += "/outputDir:$OutDir"
+          $content += "/intermediateDir:$IntDir"
+          $content += ""
+          $content += "/platform:Android"
+          $content += "/profile:HiDef"
+          $content += ""
+          $content += "/importer:EffectImporter"
+          $content += "/processor:EffectProcessor"
+          $content += ""
+          $content += $buildLines
+          $content | Set-Content -Path $mgcbFile -Encoding utf8
+
+          Write-Host "WorkingDir : $workingDir"
+          Write-Host "FX count   : $($fxFiles.Count)"
+          Write-Host "OutputDir  : $OutDir"
+
+          # Build (workingDir ANTES do /@)
+          mgcb "/workingDir:$workingDir" /rebuild "/@:$mgcbFile"
+
+          # Mostra o que gerou
+          Get-ChildItem -Recurse -Path $OutDir | Select-Object FullName, Length
+
+      - name: Upload artifact (Saidaa)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Effects-XNB-Android
+          path: Saidaa
+          if-no-files-found: error
