@@ -34,17 +34,13 @@ jobs:
           $OutDir = "Saidaa"
           $IntDir = "Saidaa_intermediate"
 
-          if (!(Test-Path $EffectsPath)) {
-            throw "Pasta EFFECTS não encontrada"
-          }
+          if (!(Test-Path $EffectsPath)) { throw "Pasta EFFECTS não encontrada" }
 
           New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
           New-Item -ItemType Directory -Force -Path $IntDir | Out-Null
 
           $fxFiles = Get-ChildItem -Path $EffectsPath -Filter *.fx -File | Sort-Object FullName
-          if ($fxFiles.Count -eq 0) {
-            throw "Nenhum .fx encontrado"
-          }
+          if ($fxFiles.Count -eq 0) { throw "Nenhum .fx encontrado" }
 
           $workingDir = (Resolve-Path ".").Path
           $buildLines = @()
@@ -56,6 +52,7 @@ jobs:
           }
 
           $mgcbFile = "EffectsOnly.mgcb"
+
           @(
             "/outputDir:$OutDir"
             "/intermediateDir:$IntDir"
@@ -70,15 +67,8 @@ jobs:
 
           mgcb "/workingDir:$workingDir" /rebuild "/@:$mgcbFile"
 
-          # Normaliza pasta de saída
-          if (Test-Path "$OutDir\EFFECTS") {
-            if (!(Test-Path "$OutDir\Effects")) {
-              New-Item -ItemType Directory -Force -Path "$OutDir\Effects" | Out-Null
-            }
-            Copy-Item -Force "$OutDir\EFFECTS\*.xnb" "$OutDir\Effects\"
-          }
-
-          Get-ChildItem -Recurse -Path $OutDir
+          Write-Host "Conteúdo gerado em Saidaa:"
+          Get-ChildItem -Recurse -Path $OutDir | Select-Object FullName, Length
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
