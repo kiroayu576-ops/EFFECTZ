@@ -25,10 +25,15 @@ jobs:
         run: |
           dotnet tool install -g dotnet-mgcb
           dotnet tool install -g dotnet-mgfxc
-          echo "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          mgcb --help
 
-      - name: Build XNB from EFFECTS (Android platform)
+          # Add dotnet global tools to PATH for subsequent steps
+          echo "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+          # Verify tools without using --help (MGCB uses /help; --help can crash in CI)
+          mgcb /version
+          mgfxc /version
+
+      - name: Build XNB from EFFECTS for Android
         shell: pwsh
         run: |
           $EffectsPath = "EFFECTS"
@@ -37,18 +42,17 @@ jobs:
 
           if (!(Test-Path $EffectsPath)) { throw "Pasta não encontrada: $EffectsPath" }
 
-          # Cria pastas de saída
           New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
           New-Item -ItemType Directory -Force -Path $IntDir | Out-Null
 
-          # Lista todos os .fx em EFFECTS/
+          # Find all .fx in EFFECTS/
           $fxFiles = Get-ChildItem -Path $EffectsPath -Filter *.fx -File | Sort-Object FullName
           if ($fxFiles.Count -eq 0) { throw "Nenhum .fx encontrado em $EffectsPath" }
 
-          # workingDir = raiz do repo (onde está a pasta EFFECTS)
+          # workingDir = repo root (where EFFECTS folder lives)
           $workingDir = (Resolve-Path ".").Path
 
-          # Monta /build:... relativo ao workingDir
+          # Build lines must be relative to workingDir
           $buildLines = @()
           foreach ($f in $fxFiles) {
             $full = $f.FullName
@@ -57,7 +61,7 @@ jobs:
             $buildLines += "/build:$rel"
           }
 
-          # Response file MGCB (no repo root)
+          # Create MGCB response file
           $mgcbFile = "EffectsOnly.mgcb"
           $content = @()
           $content += "/outputDir:$OutDir"
@@ -75,11 +79,18 @@ jobs:
           Write-Host "WorkingDir : $workingDir"
           Write-Host "FX count   : $($fxFiles.Count)"
           Write-Host "OutputDir  : $OutDir"
+          Write-Host "MGCB file  : $mgcbFile"
 
-          # Build (workingDir ANTES do /@)
+          # Build (workingDir must be applied before /@)
           mgcb "/workingDir:$workingDir" /rebuild "/@:$mgcbFile"
 
-          # Mostra o que gerou
+          # Normalize output folder name (optional convenience):
+          # If MGCB outputs to Saidaa/EFFECTS, copy to Saidaa/Effects too.
+          if (Test-Path "$OutDir\EFFECTS") {
+            New-Item -ItemType Directory -Force -Path "$OutDir\Effects" | Out-Null
+            Copy-Item -Force -Path "$OutDir\EFFECTS\*.xnb" -Destination "$OutDir\Effects\"
+          }
+
           Get-ChildItem -Recurse -Path $OutDir | Select-Object FullName, Length
 
       - name: Upload artifact (Saidaa)
@@ -88,3 +99,4 @@ jobs:
           name: Effects-XNB-Android
           path: Saidaa
           if-no-files-found: error
+```0
