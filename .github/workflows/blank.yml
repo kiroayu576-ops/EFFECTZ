@@ -29,10 +29,6 @@ jobs:
           # Add dotnet global tools to PATH for subsequent steps
           echo "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-          # Verify tools without using --help (MGCB uses /help; --help can crash in CI)
-          mgcb /version
-          mgfxc /version
-
       - name: Build XNB from EFFECTS for Android
         shell: pwsh
         run: |
@@ -84,8 +80,7 @@ jobs:
           # Build (workingDir must be applied before /@)
           mgcb "/workingDir:$workingDir" /rebuild "/@:$mgcbFile"
 
-          # Normalize output folder name (optional convenience):
-          # If MGCB outputs to Saidaa/EFFECTS, copy to Saidaa/Effects too.
+          # Convenience: if output ends up in Saidaa/EFFECTS, mirror it to Saidaa/Effects
           if (Test-Path "$OutDir\EFFECTS") {
             New-Item -ItemType Directory -Force -Path "$OutDir\Effects" | Out-Null
             Copy-Item -Force -Path "$OutDir\EFFECTS\*.xnb" -Destination "$OutDir\Effects\"
@@ -99,4 +94,3 @@ jobs:
           name: Effects-XNB-Android
           path: Saidaa
           if-no-files-found: error
-
