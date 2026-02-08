@@ -54,6 +54,7 @@ technique Glow
 {
     pass
     {
-        PixelShader = compile PS_2_SHADER_COMPILER PS_Glow();
+        // Força shader model 3.0 para suportar a cadeia de endereçamento (dependent texture reads)
+        PixelShader = compile ps_3_0 PS_Glow();
     }
 }
