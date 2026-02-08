@@ -25,11 +25,9 @@ jobs:
         run: |
           dotnet tool install -g dotnet-mgcb
           dotnet tool install -g dotnet-mgfxc
-
-          # Add dotnet global tools to PATH for subsequent steps
           echo "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Build XNB from EFFECTS for Android
+      - name: Build XNB from EFFECTS for Android (skip MagicGlow)
         shell: pwsh
         run: |
           $EffectsPath = "EFFECTS"
@@ -41,14 +39,15 @@ jobs:
           New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
           New-Item -ItemType Directory -Force -Path $IntDir | Out-Null
 
-          # Find all .fx in EFFECTS/
-          $fxFiles = Get-ChildItem -Path $EffectsPath -Filter *.fx -File | Sort-Object FullName
-          if ($fxFiles.Count -eq 0) { throw "Nenhum .fx encontrado em $EffectsPath" }
+          # List .fx, but skip MagicGlow.fx for now (fails under ps_2_0 path in mgfxc)
+          $fxFiles = Get-ChildItem -Path $EffectsPath -Filter *.fx -File |
+            Where-Object { $_.Name -ne "MagicGlow.fx" } |
+            Sort-Object FullName
 
-          # workingDir = repo root (where EFFECTS folder lives)
+          if ($fxFiles.Count -eq 0) { throw "Nenhum .fx encontrado (após filtro) em $EffectsPath" }
+
           $workingDir = (Resolve-Path ".").Path
 
-          # Build lines must be relative to workingDir
           $buildLines = @()
           foreach ($f in $fxFiles) {
             $full = $f.FullName
@@ -57,7 +56,6 @@ jobs:
             $buildLines += "/build:$rel"
           }
 
-          # Create MGCB response file
           $mgcbFile = "EffectsOnly.mgcb"
           $content = @()
           $content += "/outputDir:$OutDir"
@@ -73,17 +71,20 @@ jobs:
           $content | Set-Content -Path $mgcbFile -Encoding utf8
 
           Write-Host "WorkingDir : $workingDir"
-          Write-Host "FX count   : $($fxFiles.Count)"
+          Write-Host "FX count   : $($fxFiles.Count) (MagicGlow.fx ignorado)"
           Write-Host "OutputDir  : $OutDir"
-          Write-Host "MGCB file  : $mgcbFile"
 
-          # Build (workingDir must be applied before /@)
           mgcb "/workingDir:$workingDir" /rebuild "/@:$mgcbFile"
 
-          # Convenience: if output ends up in Saidaa/EFFECTS, mirror it to Saidaa/Effects
-          if (Test-Path "$OutDir\EFFECTS") {
-            New-Item -ItemType Directory -Force -Path "$OutDir\Effects" | Out-Null
-            Copy-Item -Force -Path "$OutDir\EFFECTS\*.xnb" -Destination "$OutDir\Effects\"
+          # Normaliza saída: se MGCB criar Saidaa/EFFECTS, espelha para Saidaa/Effects (apenas se forem pastas diferentes)
+          $src = Join-Path $OutDir "EFFECTS"
+          $dst = Join-Path $OutDir "Effects"
+          if (Test-Path $src) {
+            if (!(Test-Path $dst)) { New-Item -ItemType Directory -Force -Path $dst | Out-Null }
+            # Copia só se origem != destino
+            if ((Resolve-Path $src).Path -ne (Resolve-Path $dst).Path) {
+              Copy-Item -Force -Path (Join-Path $src "*.xnb") -Destination $dst
+            }
           }
 
           Get-ChildItem -Recurse -Path $OutDir | Select-Object FullName, Length
